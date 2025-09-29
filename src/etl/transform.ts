@@ -72,37 +72,37 @@ async function loadCaregivers(csvPath: string) {
             continue;
         }
         await client.query(
-        `INSERT INTO stage.stage_caregivers (
-            franchisor_id, agency_id, subdomain, profile_id, caregiver_id,
-            external_id, first_name, last_name, email, phone_number, gender,
-            applicant, birthday_date, onboarding_date, location_name, locations_id,
-            applicant_status, status
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-        ON CONFLICT (caregiver_id) DO UPDATE
-        SET franchisor_id=$1, agency_id=$2, subdomain=$3, profile_id=$4,
-            external_id=$6, first_name=$7, last_name=$8, email=$9, phone_number=$10, gender=$11,
-            applicant=$12, birthday_date=$13, onboarding_date=$14, location_name=$15, locations_id=$16,
-            applicant_status=$17, status=$18`,
-        [
-            toNullable(r.franchisor_id),
-            toNullable(r.agency_id),
-            toNullable(r.subdomain),
-            toNullable(r.profile_id),
-            caregiver_id,
-            toNullable(r.external_id),
-            toNullable(r.first_name),
-            toNullable(r.last_name),
-            toNullable(r.email),
-            toNullable(r.phone_number),
-            toNullable(r.gender),
-            toBool(r.applicant),
-            toNullable(r.birthday_date),
-            toNullable(r.onboarding_date),
-            toNullable(r.location_name),
-            toNullable(r.locations_id),
-            toNullable(r.applicant_status),
-            toNullable(r.status)
-        ]
+            `INSERT INTO stage_caregivers (
+                franchisor_id, agency_id, subdomain, profile_id, caregiver_id,
+                external_id, first_name, last_name, email, phone_number, gender,
+                applicant, birthday_date, onboarding_date, location_name, locations_id,
+                applicant_status, status
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+            ON CONFLICT (caregiver_id) DO UPDATE
+            SET franchisor_id=$1, agency_id=$2, subdomain=$3, profile_id=$4,
+                external_id=$6, first_name=$7, last_name=$8, email=$9, phone_number=$10, gender=$11,
+                applicant=$12, birthday_date=$13, onboarding_date=$14, location_name=$15, locations_id=$16,
+                applicant_status=$17, status=$18`,
+          [
+              toNullable(r.franchisor_id),
+              toNullable(r.agency_id),
+              toNullable(r.subdomain),
+              toNullable(r.profile_id),
+              caregiver_id,
+              toNullable(r.external_id),
+              toNullable(r.first_name),
+              toNullable(r.last_name),
+              toNullable(r.email),
+              toNullable(r.phone_number),
+              toNullable(r.gender),
+              toBool(r.applicant),
+              toNullable(r.birthday_date),
+              toNullable(r.onboarding_date),
+              toNullable(r.location_name),
+              toNullable(r.locations_id),
+              toNullable(r.applicant_status),
+              toNullable(r.status)
+          ]
         );
         ok++;
     }
@@ -133,9 +133,9 @@ async function loadCarelogs(csvPath: string) {
             continue; 
         }
         await client.query(
-        `INSERT INTO stage.stage_carelogs (
+        `INSERT INTO stage_carelogs (
             franchisor_id, agency_id,
-            carelog_id, parent_id, caregiver_id,
+            carelog_id, caregiver_id, parent_id,
             start_datetime, end_datetime,
             clock_in_actual_datetime, clock_out_actual_datetime,
             clock_in_method, clock_out_method, status, split,
@@ -143,7 +143,7 @@ async function loadCarelogs(csvPath: string) {
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
         ON CONFLICT (carelog_id) DO UPDATE
         SET franchisor_id=$1, agency_id=$2,
-            parent_id=$4, caregiver_id=$5,
+            caregiver_id=$4, parent_id=$5,
             start_datetime=$6, end_datetime=$7,
             clock_in_actual_datetime=$8, clock_out_actual_datetime=$9,
             clock_in_method=$10, clock_out_method=$11, status=$12, split=$13,
@@ -152,17 +152,17 @@ async function loadCarelogs(csvPath: string) {
             toNullable(r.franchisor_id),
             toNullable(r.agency_id),
             carelog_id,
-            toNullable(r.parent_id),
             toNullable(r.caregiver_id),
+            toNullable(r.parent_id),
             toNullable(r.start_datetime),
             toNullable(r.end_datetime),
             toNullable(r.clock_in_actual_datetime),
             toNullable(r.clock_out_actual_datetime),
-            toNullable(r.clock_in_method),   // keep as text in stage
-            toNullable(r.clock_out_method),  // keep as text in stage
-            toNullable(r.status),            // keep as text in stage
-            toBool(r.split),                 // boolean in stage
-            toNullable(r.documentation),     // free text in stage only
+            toNullable(r.clock_in_method),
+            toNullable(r.clock_out_method),
+            toNullable(r.status),
+            toBool(r.split),
+            toNullable(r.documentation),
             toInt(r.general_comment_char_count)
         ]
         );
@@ -193,7 +193,7 @@ async function main() {
     await loadCarelogs(carelogCsv);
 
     const countResult = await pool.query(
-    "SELECT (SELECT COUNT(*) FROM stage.stage_caregivers) AS caregivers, (SELECT COUNT(*) FROM stage.stage_carelogs) AS carelogs"
+    "SELECT (SELECT COUNT(*) FROM stage_caregivers) AS caregivers, (SELECT COUNT(*) FROM stage_carelogs) AS carelogs"
     );
     console.log("count in database:", countResult.rows[0]);
 
