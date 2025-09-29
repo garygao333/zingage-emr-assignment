@@ -1,22 +1,17 @@
 /**
- * ETL Pipeline for Zingage Home Care EMR Data
+ * Extract, Transform, Load (ETL) pipeline
  *
- * This script processes two CSV files:
- * 1. Caregiver profiles (~1M records)
- * 2. Care visit logs (~300K records)
- *
- * Features:
- * - Streaming processing (memory efficient)
- * - Transaction safety (all or nothing)
- * - Idempotent (can re-run safely)
+ * Loads caregiver and carelog data from CSV files into stage tables. 
+ * It does so by streaming the CSV data row by row to avoid blowing up RAM. 
  */
 
 import fs from "node:fs";
 import { parse } from "csv-parse";
 import { Pool } from "pg";
 import "dotenv/config";
+import { skip } from "node:test";
 
-// Database connection from environment
+// Connect to database
 const { DATABASE_URL } = process.env;
 if (!DATABASE_URL) {
   console.error("Missing DATABASE_URL in .env");
@@ -24,65 +19,95 @@ if (!DATABASE_URL) {
 }
 const pool = new Pool({ connectionString: DATABASE_URL });
 
-/**
- * Data transformation utilities
- * Empty strings become NULL (preserves meaning: "not provided")
- */
-
-// Convert various boolean representations to true/false/null
+// Maps boolean strings to boolean values. Returns NULL if empty or null. 
+// THINK ABOUT: Should we convert status codes into booleans? 
 function toBool(v: any): boolean | null {
-  if (v === undefined || v === null || v === "") return null;
-  const s = String(v).toLowerCase();
-  if (["true", "t", "1", "yes", "y"].includes(s)) return true;
-  if (["false", "f", "0", "no", "n"].includes(s)) return false;
-  return null;
+    if (v === undefined || v === null || v === "") {
+        return null;
+    }
+    const s = String(v).toLowerCase();
+    if (["true", "TRUE"].includes(s)) {
+        return true;
+    }
+    if (["false", "FALSE"].includes(s)) {
+        return false;
+    }
+    return null;
 }
 
-// Convert to number, preserving NULL for missing data
+// Converts numerical strings to numbers. Returns NULL if empty, null, or invalid (like infinity). 
 function toInt(v: any): number | null {
-  if (v === undefined || v === null || v === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+    if (v === undefined || v === null || v === "") {
+        return null;
+    }
+    const n = Number(v);
+    if (Number.isFinite(n)) {
+        return n;
+    } else {
+        return null;
+    }
 }
 
-// Convert to string, treating empty as NULL
+// Convert a value to string. Converts undefined, null, or empty string to null. 
 function toNullable(v: any): string | null {
-  return (v === undefined || v === null || v === "") ? null : String(v);
+  if (v === undefined || v === null || v === "") {
+    return null;
+  }
+  return String(v);
 }
 
-/**
- * Load caregiver profiles from CSV
- * Only skips rows without caregiver_id (primary key)
- * Uses UPSERT to handle duplicates gracefully
- */
+//Read caregiver CSV row by row and write each row into the caregiver stage table. 
+// Skips rows without caregiver_id (primary key).
+// If a row with the same caregiver_id already exists, update it instead of inserting a new row (UPSERT).
 async function loadCaregivers(csvPath: string) {
   const client = await pool.connect();
-  await client.query("BEGIN"); // Start transaction
+  await client.query("BEGIN"); 
   let ok = 0, skipped = 0;
   try {
     const parser = fs.createReadStream(csvPath).pipe(parse({ columns: true, trim: true }));
     for await (const r of parser) {
-      const caregiver_id = toNullable(r.caregiver_id);
-      if (!caregiver_id) { skipped++; continue; }             // only skip if key is missing
-      await client.query(
-        `INSERT INTO stage_caregivers (
-           franchisor_id, agency_id, profile_id, caregiver_id, applicant_status, status
-         ) VALUES ($1,$2,$3,$4,$5,$6)
-         ON CONFLICT (caregiver_id) DO UPDATE
-           SET franchisor_id=$1, agency_id=$2, profile_id=$3, applicant_status=$5, status=$6`,
+        const caregiver_id = toNullable(r.caregiver_id);
+        if (!caregiver_id)  {
+            skipped++;
+            continue;
+        }
+        await client.query(
+        `INSERT INTO stage.stage_caregivers (
+            franchisor_id, agency_id, subdomain, profile_id, caregiver_id,
+            external_id, first_name, last_name, email, phone_number, gender,
+            applicant, birthday_date, onboarding_date, location_name, locations_id,
+            applicant_status, status
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+        ON CONFLICT (caregiver_id) DO UPDATE
+        SET franchisor_id=$1, agency_id=$2, subdomain=$3, profile_id=$4,
+            external_id=$6, first_name=$7, last_name=$8, email=$9, phone_number=$10, gender=$11,
+            applicant=$12, birthday_date=$13, onboarding_date=$14, location_name=$15, locations_id=$16,
+            applicant_status=$17, status=$18`,
         [
-          toNullable(r.franchisor_id),
-          toNullable(r.agency_id),
-          toNullable(r.profile_id),
-          caregiver_id,
-          toNullable(r.applicant_status),
-          toNullable(r.status),
+            toNullable(r.franchisor_id),
+            toNullable(r.agency_id),
+            toNullable(r.subdomain),
+            toNullable(r.profile_id),
+            caregiver_id,
+            toNullable(r.external_id),
+            toNullable(r.first_name),
+            toNullable(r.last_name),
+            toNullable(r.email),
+            toNullable(r.phone_number),
+            toNullable(r.gender),
+            toBool(r.applicant),
+            toNullable(r.birthday_date),
+            toNullable(r.onboarding_date),
+            toNullable(r.location_name),
+            toNullable(r.locations_id),
+            toNullable(r.applicant_status),
+            toNullable(r.status)
         ]
-      );
-      ok++;
+        );
+        ok++;
     }
     await client.query("COMMIT");
-    console.log(`caregivers: inserted/updated=${ok}, skipped_missing_key=${skipped}`);
+    console.log(`caregivers table: inserted/updated: ${ok}, skipped(due to missing primary key): ${skipped}`);
   } catch (e) {
     await client.query("ROLLBACK");
     console.error("caregivers load failed:", e);
@@ -92,51 +117,59 @@ async function loadCaregivers(csvPath: string) {
   }
 }
 
-/**
- * Load care visit logs from CSV
- * Only skips rows without carelog_id (primary key)
- * Links to caregivers via caregiver_id foreign key
- */
+// Load carelog CSV row by row into carelog stage table.
+// Skips rows without carelog_id (primary key).
+// If a row with the same carelog_id already exists, update it instead of inserting a new row (UPSERT).
 async function loadCarelogs(csvPath: string) {
   const client = await pool.connect();
-  await client.query("BEGIN"); // Start transaction
+  await client.query("BEGIN");
   let ok = 0, skipped = 0;
   try {
     const parser = fs.createReadStream(csvPath).pipe(parse({ columns: true, trim: true }));
     for await (const r of parser) {
-      const carelog_id = toNullable(r.carelog_id);
-      if (!carelog_id) { skipped++; continue; }               // only skip if key is missing
-      await client.query(
-        `INSERT INTO stage_carelogs (
-           carelog_id, parent_id, caregiver_id,
-           start_datetime, end_datetime,
-           clock_in_actual_datetime, clock_out_actual_datetime,
-           clock_in_method, clock_out_method, status, split, general_comment_char_count
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-         ON CONFLICT (carelog_id) DO UPDATE
-           SET parent_id=$2, caregiver_id=$3, start_datetime=$4, end_datetime=$5,
-               clock_in_actual_datetime=$6, clock_out_actual_datetime=$7,
-               clock_in_method=$8, clock_out_method=$9, status=$10, split=$11,
-               general_comment_char_count=$12`,
+        const carelog_id = toNullable(r.carelog_id);
+        if (!carelog_id) {
+            skipped++; 
+            continue; 
+        }
+        await client.query(
+        `INSERT INTO stage.stage_carelogs (
+            franchisor_id, agency_id,
+            carelog_id, parent_id, caregiver_id,
+            start_datetime, end_datetime,
+            clock_in_actual_datetime, clock_out_actual_datetime,
+            clock_in_method, clock_out_method, status, split,
+            documentation, general_comment_char_count
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+        ON CONFLICT (carelog_id) DO UPDATE
+        SET franchisor_id=$1, agency_id=$2,
+            parent_id=$4, caregiver_id=$5,
+            start_datetime=$6, end_datetime=$7,
+            clock_in_actual_datetime=$8, clock_out_actual_datetime=$9,
+            clock_in_method=$10, clock_out_method=$11, status=$12, split=$13,
+            documentation=$14, general_comment_char_count=$15`,
         [
-          carelog_id,
-          toNullable(r.parent_id),
-          toNullable(r.caregiver_id),
-          toNullable(r.start_datetime),
-          toNullable(r.end_datetime),
-          toNullable(r.clock_in_actual_datetime),
-          toNullable(r.clock_out_actual_datetime),
-          toNullable(r.clock_in_method),
-          toNullable(r.clock_out_method),
-          toNullable(r.status),
-          toBool(r.split),
-          toInt(r.general_comment_char_count)
+            toNullable(r.franchisor_id),
+            toNullable(r.agency_id),
+            carelog_id,
+            toNullable(r.parent_id),
+            toNullable(r.caregiver_id),
+            toNullable(r.start_datetime),
+            toNullable(r.end_datetime),
+            toNullable(r.clock_in_actual_datetime),
+            toNullable(r.clock_out_actual_datetime),
+            toNullable(r.clock_in_method),   // keep as text in stage
+            toNullable(r.clock_out_method),  // keep as text in stage
+            toNullable(r.status),            // keep as text in stage
+            toBool(r.split),                 // boolean in stage
+            toNullable(r.documentation),     // free text in stage only
+            toInt(r.general_comment_char_count)
         ]
-      );
-      ok++;
+        );
+        ok++;
     }
     await client.query("COMMIT");
-    console.log(`carelogs: inserted/updated=${ok}, skipped_missing_key=${skipped}`);
+    console.log(`carelogs: inserted/updated: ${ok}, skipped (due to missing primary key): ${skipped}`);
   } catch (e) {
     await client.query("ROLLBACK");
     console.error("carelogs load failed:", e);
@@ -146,32 +179,28 @@ async function loadCarelogs(csvPath: string) {
   }
 }
 
-/**
- * Main ETL execution
- * Processes both CSV files sequentially
- * Reports final counts for verification
- */
+// Main ETL function
 async function main() {
-  // Allow custom CSV paths via command line arguments
-  const caregiverCsv = process.argv[2] ?? "data/caregiver_data_20250415_sanitized.csv";
-  const carelogCsv = process.argv[3] ?? "data/carelog_data_20250415_sanitized.csv";
+    const caregiverCsv = "data/caregiver_data_20250415_sanitized.csv";
+    const carelogCsv = "data/carelog_data_20250415_sanitized.csv";
 
-  // Verify database connection
-  console.log("Connecting to:", DATABASE_URL);
-  const testResult = await pool.query("SELECT current_database(), current_user");
-  console.log("Connected to database:", testResult.rows[0]);
+    // verify database connection
+    console.log("connecting to:", DATABASE_URL);
+    const testResult = await pool.query("SELECT current_database(), current_user");
+    console.log("connected to database:", testResult.rows[0]);
 
-  // Load data in order (caregivers first, then their visits)
-  await loadCaregivers(caregiverCsv);
-  await loadCarelogs(carelogCsv);
+    await loadCaregivers(caregiverCsv);
+    await loadCarelogs(carelogCsv);
 
-  // Verify final counts
-  const countResult = await pool.query(
-    "SELECT (SELECT COUNT(*) FROM stage_caregivers) as caregivers, (SELECT COUNT(*) FROM stage_carelogs) as carelogs"
-  );
-  console.log("Final counts in database:", countResult.rows[0]);
+    const countResult = await pool.query(
+    "SELECT (SELECT COUNT(*) FROM stage.stage_caregivers) AS caregivers, (SELECT COUNT(*) FROM stage.stage_carelogs) AS carelogs"
+    );
+    console.log("count in database:", countResult.rows[0]);
 
-  await pool.end();
+    await pool.end();
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+main().catch(err => {
+    console.error(err);
+    process.exit(1);
+});
