@@ -8,9 +8,7 @@
     "db:ddl:norm": "psql \"$DATABASE_URL\" -f sql/ddl_norm.sql",
     "etl": "tsx src/etl/transform.ts",
     "db:dml": "psql \"$DATABASE_URL\" -f sql/dml.sql",
-    "queries": "psql \"$DATABASE_URL\" -f sql/queries.sql",
-    "all": "npm run db:ddl:init && npm run db:ddl:norm && npm run etl && npm run db:dml",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "queries": "psql \"$DATABASE_URL\" -f sql/queries.sql"
   },
   "keywords": [],
   "author": "",

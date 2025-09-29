@@ -106,7 +106,9 @@ async function loadCaregivers(csvPath: string) {
         );
         ok++;
     }
-    await client.query("COMMIT");
+    // Typically don't commit after every row, but doing so here to keep the code simple and clear. 
+    // In future, could use counter to batch commit and commit every few thousand rows. 
+    await client.query("COMMIT"); // Could have used callback functions but chose await/async for clarity.
     console.log(`caregivers table: inserted/updated: ${ok}, skipped(due to missing primary key): ${skipped}`);
   } catch (e) {
     await client.query("ROLLBACK");
@@ -168,7 +170,7 @@ async function loadCarelogs(csvPath: string) {
         );
         ok++;
     }
-    await client.query("COMMIT");
+    await client.query("COMMIT"); 
     console.log(`carelogs: inserted/updated: ${ok}, skipped (due to missing primary key): ${skipped}`);
   } catch (e) {
     await client.query("ROLLBACK");
