@@ -1,8 +1,22 @@
+/**
+ * ETL Pipeline for Zingage Home Care EMR Data
+ *
+ * This script processes two CSV files:
+ * 1. Caregiver profiles (~1M records)
+ * 2. Care visit logs (~300K records)
+ *
+ * Features:
+ * - Streaming processing (memory efficient)
+ * - Transaction safety (all or nothing)
+ * - Idempotent (can re-run safely)
+ */
+
 import fs from "node:fs";
 import { parse } from "csv-parse";
 import { Pool } from "pg";
 import "dotenv/config";
 
+// Database connection from environment
 const { DATABASE_URL } = process.env;
 if (!DATABASE_URL) {
   console.error("Missing DATABASE_URL in .env");
@@ -10,6 +24,12 @@ if (!DATABASE_URL) {
 }
 const pool = new Pool({ connectionString: DATABASE_URL });
 
+/**
+ * Data transformation utilities
+ * Empty strings become NULL (preserves meaning: "not provided")
+ */
+
+// Convert various boolean representations to true/false/null
 function toBool(v: any): boolean | null {
   if (v === undefined || v === null || v === "") return null;
   const s = String(v).toLowerCase();
@@ -17,18 +37,27 @@ function toBool(v: any): boolean | null {
   if (["false", "f", "0", "no", "n"].includes(s)) return false;
   return null;
 }
+
+// Convert to number, preserving NULL for missing data
 function toInt(v: any): number | null {
   if (v === undefined || v === null || v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
+
+// Convert to string, treating empty as NULL
 function toNullable(v: any): string | null {
   return (v === undefined || v === null || v === "") ? null : String(v);
 }
 
+/**
+ * Load caregiver profiles from CSV
+ * Only skips rows without caregiver_id (primary key)
+ * Uses UPSERT to handle duplicates gracefully
+ */
 async function loadCaregivers(csvPath: string) {
   const client = await pool.connect();
-  await client.query("BEGIN");
+  await client.query("BEGIN"); // Start transaction
   let ok = 0, skipped = 0;
   try {
     const parser = fs.createReadStream(csvPath).pipe(parse({ columns: true, trim: true }));
@@ -63,9 +92,14 @@ async function loadCaregivers(csvPath: string) {
   }
 }
 
+/**
+ * Load care visit logs from CSV
+ * Only skips rows without carelog_id (primary key)
+ * Links to caregivers via caregiver_id foreign key
+ */
 async function loadCarelogs(csvPath: string) {
   const client = await pool.connect();
-  await client.query("BEGIN");
+  await client.query("BEGIN"); // Start transaction
   let ok = 0, skipped = 0;
   try {
     const parser = fs.createReadStream(csvPath).pipe(parse({ columns: true, trim: true }));
@@ -112,19 +146,26 @@ async function loadCarelogs(csvPath: string) {
   }
 }
 
+/**
+ * Main ETL execution
+ * Processes both CSV files sequentially
+ * Reports final counts for verification
+ */
 async function main() {
-  const cg = process.argv[2] ?? "data/caregiver_data_20250415_sanitized.csv";
-  const cl = process.argv[3] ?? "data/carelog_data_20250415_sanitized.csv";
+  // Allow custom CSV paths via command line arguments
+  const caregiverCsv = process.argv[2] ?? "data/caregiver_data_20250415_sanitized.csv";
+  const carelogCsv = process.argv[3] ?? "data/carelog_data_20250415_sanitized.csv";
 
-  // Verify connection
+  // Verify database connection
   console.log("Connecting to:", DATABASE_URL);
   const testResult = await pool.query("SELECT current_database(), current_user");
   console.log("Connected to database:", testResult.rows[0]);
 
-  await loadCaregivers(cg);
-  await loadCarelogs(cl);
+  // Load data in order (caregivers first, then their visits)
+  await loadCaregivers(caregiverCsv);
+  await loadCarelogs(carelogCsv);
 
-  // Verify data was actually inserted
+  // Verify final counts
   const countResult = await pool.query(
     "SELECT (SELECT COUNT(*) FROM stage_caregivers) as caregivers, (SELECT COUNT(*) FROM stage_carelogs) as carelogs"
   );

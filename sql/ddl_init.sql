@@ -1,19 +1,30 @@
--- Create schemas for logical organization (tables still in public)
+/*
+ * STAGE LAYER: Raw Data Ingestion
+ *
+ * Purpose: Mirror CSV structure exactly for initial load
+ * No complex constraints to allow all data to load
+ * Only primary keys enforced to prevent duplicates
+ */
+
+-- Create logical schemas (for future use)
 CREATE SCHEMA IF NOT EXISTS stage;
 CREATE SCHEMA IF NOT EXISTS model;
 CREATE SCHEMA IF NOT EXISTS mart;
 
--- Stage tables mirror CSVs (typed, minimal constraints)
+-- Caregiver profiles staging table
+-- Matches: caregiver_data_20250415_sanitized.csv
 CREATE TABLE IF NOT EXISTS stage_caregivers (
   franchisor_id text,
   agency_id text,
   profile_id text,
   caregiver_id text PRIMARY KEY,
   applicant_status text,
-  status text,                       -- 'active' | 'deactivated'
-  _ingested_at timestamptz DEFAULT now()
+  status text,                       -- Employment status: 'active' or 'deactivated'
+  _ingested_at timestamptz DEFAULT now()  -- Audit timestamp
 );
 
+-- Care visit logs staging table
+-- Matches: carelog_data_20250415_sanitized.csv
 CREATE TABLE IF NOT EXISTS stage_carelogs (
   carelog_id text PRIMARY KEY,
   parent_id text,
@@ -24,8 +35,8 @@ CREATE TABLE IF NOT EXISTS stage_carelogs (
   clock_out_actual_datetime timestamptz,
   clock_in_method text,
   clock_out_method text,
-  status text,                       -- keep as text; we won't decode numeric codes
-  split boolean,
-  general_comment_char_count int,
-  _ingested_at timestamptz DEFAULT now()
+  status text,                       -- Visit status code (kept as-is from EMR)
+  split boolean,                     -- TRUE if shift was split into multiple
+  general_comment_char_count int,    -- Length of caregiver's visit notes
+  _ingested_at timestamptz DEFAULT now()  -- Audit timestamp
 );

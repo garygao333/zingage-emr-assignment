@@ -1,4 +1,12 @@
--- 1) Normalize caregivers first (ensure FK target exists)
+/*
+ * DATA MIGRATION & ANALYTICS QUERIES
+ *
+ * This script:
+ * 1. Migrates data from staging to normalized model
+ * 2. Runs all analytical queries for business insights
+ */
+
+-- Step 1: Migrate caregivers (must be first for foreign key constraint)
 INSERT INTO model_caregiver (caregiver_id, agency_id, profile_id, applicant_status, employment_status)
 SELECT caregiver_id, agency_id, profile_id, applicant_status, status
 FROM stage_caregivers
@@ -9,7 +17,7 @@ ON CONFLICT (caregiver_id) DO UPDATE
       applicant_status = EXCLUDED.applicant_status,
       employment_status = EXCLUDED.employment_status;
 
--- 2) Normalize visits
+-- Step 2: Migrate care visits (references caregivers)
 INSERT INTO model_carevisit (
   carelog_id, caregiver_id, parent_id,
   start_at, end_at, in_at, out_at,
@@ -34,16 +42,21 @@ ON CONFLICT (carelog_id) DO UPDATE
       is_split     = EXCLUDED.is_split,
       comment_chars= EXCLUDED.comment_chars;
 
--- ======= Final result queries (copy to README as screenshots) =======
+/*
+ * ANALYTICAL QUERIES - Business Intelligence Results
+ */
 
--- Q1 Top performers
+-- Question 1a: Top Performers (Most Completed Visits)
+-- "Completed" = has both clock in/out times, duration >5 minutes
 SELECT caregiver_id, COUNT(*) AS completed
 FROM mart_completed_visits
 GROUP BY caregiver_id
 ORDER BY completed DESC
 LIMIT 20;
 
--- Q1 Reliability issues (min 10 visits)
+-- Question 1b: Reliability Issues
+-- Flags caregivers with frequent problems (late/missed/short visits)
+-- Only shows caregivers with 10+ visits for statistical significance
 SELECT caregiver_id, total_visits, missed, late_arrivals, short_worked,
        ROUND(100*reliability_issue_rate,1) AS issue_rate_pct
 FROM mart_reliability_by_caregiver
@@ -51,26 +64,30 @@ WHERE total_visits >= 10
 ORDER BY reliability_issue_rate DESC
 LIMIT 20;
 
--- Q2 Duration stats
+-- Question 2a: Visit Duration Statistics
+-- Shows average, median (P50), and 90th percentile durations
 SELECT * FROM mart_duration_stats;
 
--- Q2 Outliers
+-- Question 2b: Duration Outliers
+-- Uses IQR method to identify unusually short/long visits
 SELECT * FROM mart_duration_outliers ORDER BY actual_mins;
 
--- Q3 Consistent documenters (>=10 completed & >=70% detailed)
+-- Question 3a: Consistent Documentation Providers
+-- Shows caregivers who leave detailed notes (≥200 chars) on ≥70% of visits
 SELECT caregiver_id, completed, detailed,
        ROUND(100*detailed_rate,1) AS detailed_pct, median_chars
 FROM mart_documentation_consistency
 WHERE completed >= 10 AND detailed_rate >= 0.70
 ORDER BY detailed_pct DESC, median_chars DESC;
 
--- Q3 Data quality spot checks (optional extras)
--- Negative/zero durations
+-- Question 3b: Data Quality Check - Negative Durations
+-- Identifies impossible timestamps (clock out before clock in)
 SELECT carelog_id, caregiver_id, in_at, out_at
 FROM mart_visit_base
 WHERE in_at IS NOT NULL AND out_at IS NOT NULL AND out_at <= in_at;
 
--- Overlapping visits
+-- Question 3b: Data Quality Check - Overlapping Visits
+-- Finds caregivers in two places at once (data integrity issue)
 WITH v AS (
   SELECT caregiver_id, carelog_id, in_at, out_at,
          LAG(out_at) OVER (PARTITION BY caregiver_id ORDER BY in_at) AS prev_out
@@ -79,7 +96,8 @@ WITH v AS (
 )
 SELECT * FROM v WHERE prev_out IS NOT NULL AND in_at < prev_out;
 
--- Q4 Overtime weeks
+-- Question 4: Overtime Analysis
+-- Shows weeks where caregivers exceeded 40 hours (2400 minutes)
 SELECT caregiver_id, week_start, ROUND(mins/60.0,1) AS hours
 FROM mart_overtime_by_week
 WHERE is_overtime

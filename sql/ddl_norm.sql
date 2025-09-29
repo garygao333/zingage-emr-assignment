@@ -5,9 +5,11 @@ CREATE TABLE IF NOT EXISTS model_caregiver (
   profile_id text,
   applicant_status text,
   employment_status text,
-  is_active boolean GENERATED ALWAYS AS (employment_status = 'active') STORED
+  is_active boolean GENERATED ALWAYS AS (employment_status = 'active') STORED  -- Computed column
 );
 
+-- Transaction table for care visits
+-- Links to caregiver via foreign key (1:N relationship)
 CREATE TABLE IF NOT EXISTS model_carevisit (
   carelog_id text PRIMARY KEY,
   caregiver_id text REFERENCES model_caregiver(caregiver_id),
