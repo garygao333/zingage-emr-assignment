@@ -1,4 +1,3 @@
-cat > .gitignore << 'EOF'
 # Large data files
 data/*.csv
 *.csv
@@ -19,9 +18,19 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+.claude/
 
 # Temporary files
 *.log
 *.tmp
 temp/
-EOF
+
+# SQL output files
+*.out
+check_*.sql
+debug_*.sql
+test_*.sql
+diagnose.sql
+direct_check.sh
+fix_etl.ts
+reset_and_reload.sh
