@@ -1,20 +1,16 @@
 {
   "compilerOptions": {
-    // File Layout
     "rootDir": "src",
     "outDir": "dist",
 
-    // Environment Settings - Fixed for CommonJS compatibility
     "module": "CommonJS",
     "target": "ES2022",
     "moduleResolution": "node",
     "types": ["node"],
 
-    // Other Outputs
     "sourceMap": true,
     "declaration": true,
 
-    // Recommended Options
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
