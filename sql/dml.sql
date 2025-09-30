@@ -28,7 +28,7 @@ SELECT * FROM mart_duration_stats;
 
 -- Identifying outliers: Identify and clearly present visits significantly shorter or longer than typical durations. 
 -- Use interquartile range, or IQR, to identify outliers. 
--- Outliers are those outside the interquartile range (Q3(75%)-Q1(25%)) with actual_mins < Q1 - 1.5*IQR or > Q3 + 1.5*IQR
+-- Outliers are those outside the interquartile range (Q3(90%)-Q1(10%))
 SELECT * FROM mart_duration_outliers ORDER BY actual_mins;
 
 -- Detailed Documentation Providers: Clearly identify caregivers consistently leaving detailed comments.
