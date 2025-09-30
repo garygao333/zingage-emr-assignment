@@ -3,42 +3,139 @@
  * Migrate data from stage to normalized model created in ddl_norm.sql
  * Run analytic queries to answer questions
  */
-
 -- Migrate caregiver data from stage to model
-INSERT INTO model_caregiver (caregiver_id, agency_id, profile_id, applicant_status, employment_status)
-SELECT caregiver_id, agency_id, profile_id, applicant_status, status
-FROM stage_caregivers
-WHERE caregiver_id IS NOT NULL
+
+-- Technically transformation, but just cleaning out the NONE.
+-- INSERT INTO model_locations(locations_id, name)
+-- SELECT distinct locations_id, location_name FROM stage_caregivers ORDER BY 1;
+-- UPDATE model_locations SET name = NULL WHERE locations_id = '0'; -- Updating by primary key
+
+TRUNCATE model_caregiver CASCADE;
+TRUNCATE model_carevisit CASCADE;
+TRUNCATE model_applicant_status CASCADE;
+TRUNCATE model_employment_status CASCADE;
+TRUNCATE model_external_identifier CASCADE;
+TRUNCATE model_profile CASCADE;
+TRUNCATE model_agency CASCADE;
+TRUNCATE model_franchisor CASCADE;
+TRUNCATE model_locations CASCADE;
+
+INSERT INTO model_locations (locations_id, name)
+SELECT DISTINCT locations_id, NULLIF(location_name,'') AS name FROM stage_caregivers WHERE locations_id IS NOT NULL;
+
+INSERT INTO model_franchisor(franchisor_id)
+SELECT DISTINCT franchisor_id FROM stage_caregivers WHERE franchisor_id IS NOT NULL ORDER BY 1;
+
+INSERT INTO model_agency( agency_id)
+SELECT DISTINCT agency_id FROM stage_caregivers WHERE franchisor_id IS NOT NULL ORDER BY 1;
+
+INSERT INTO model_profile(profile_id)
+SELECT DISTINCT profile_id FROM stage_caregivers ORDER BY 1;
+
+INSERT INTO model_external_identifier (external_id)
+SELECT DISTINCT external_id FROM stage_caregivers WHERE external_id IS NOT NULL AND external_id <> '' ORDER BY 1;
+
+INSERT INTO model_employment_status (employment_status)
+SELECT DISTINCT status FROM stage_caregivers WHERE status IS NOT NULL ORDER BY 1;
+
+INSERT INTO model_applicant_status (applicant_status)
+SELECT DISTINCT applicant_status FROM stage_caregivers WHERE applicant_status IS NOT NULL ORDER BY 1;
+
+INSERT INTO model_caregiver (
+  caregiver_id,
+  franchisor_id,
+  agency_id,
+  locations_id,
+  profile_id,
+  external_id,
+  applicant_status_id,
+  employment_status_id,
+  is_active
+)
+SELECT
+  sc.caregiver_id,
+  sc.franchisor_id,
+  sc.agency_id,
+  sc.locations_id,
+  sc.profile_id,
+  NULLIF(sc.external_id,'') AS external_id,
+  mas.applicant_status_id,
+  mes.employment_status_id,
+  CASE WHEN mes.employment_status = 'active' THEN TRUE ELSE FALSE END AS is_active
+FROM stage_caregivers sc
+LEFT JOIN model_applicant_status mas
+  ON mas.applicant_status = sc.applicant_status
+LEFT JOIN model_employment_status mes
+  ON mes.employment_status = sc.status
+WHERE sc.caregiver_id IS NOT NULL
 ON CONFLICT (caregiver_id) DO UPDATE
-    SET agency_id = EXCLUDED.agency_id,
-        profile_id = EXCLUDED.profile_id,
-        applicant_status = EXCLUDED.applicant_status,
-        employment_status = EXCLUDED.employment_status;
+SET franchisor_id        = EXCLUDED.franchisor_id,
+    agency_id            = EXCLUDED.agency_id,
+    locations_id         = EXCLUDED.locations_id,
+    profile_id           = EXCLUDED.profile_id,
+    external_id          = EXCLUDED.external_id,
+    applicant_status_id  = EXCLUDED.applicant_status_id,
+    employment_status_id = EXCLUDED.employment_status_id,
+    is_active            = EXCLUDED.is_active;
+
+\echo === caregiver count ===
+SELECT COUNT(*) AS model_caregiver FROM model_caregiver;
 
 --Migratae carevisit data from stage to model
 INSERT INTO model_carevisit (
-    carelog_id, caregiver_id, parent_id,
-    start_at, end_at, in_at, out_at,
-    clock_in_method, clock_out_method, status_code, is_split, comment_chars
+  carelog_id,
+  caregiver_id,
+  agency_id,
+  franchisor_id,
+  parent_id,
+  start_at,
+  end_at,
+  in_at,
+  out_at,
+  clock_in_method,
+  clock_out_method,
+  status_code,
+  is_split,
+  comment_chars
 )
 SELECT
-    carelog_id, caregiver_id, parent_id,
-    start_datetime, end_datetime, clock_in_actual_datetime, clock_out_actual_datetime,
-    clock_in_method, clock_out_method, status, split, general_comment_char_count
-FROM stage_carelogs
-WHERE carelog_id IS NOT NULL AND caregiver_id IS NOT NULL
+  cl.carelog_id,
+  cl.caregiver_id,
+  cl.agency_id,
+  cl.franchisor_id,
+  cl.parent_id,
+  cl.start_datetime,
+  cl.end_datetime,
+  cl.clock_in_actual_datetime,
+  cl.clock_out_actual_datetime,
+  cl.clock_in_method,
+  cl.clock_out_method,
+  cl.status,
+  cl.split,
+  cl.general_comment_char_count
+FROM stage_carelogs cl
+WHERE cl.carelog_id   IS NOT NULL
+  AND cl.caregiver_id IS NOT NULL
 ON CONFLICT (carelog_id) DO UPDATE
-    SET caregiver_id = EXCLUDED.caregiver_id,
-        parent_id = EXCLUDED.parent_id,
-        start_at = EXCLUDED.start_at,
-        end_at = EXCLUDED.end_at,
-        in_at = EXCLUDED.in_at,
-        out_at = EXCLUDED.out_at,
-        clock_in_method = EXCLUDED.clock_in_method,
-        clock_out_method = EXCLUDED.clock_out_method,
-        status_code = EXCLUDED.status_code,
-        is_split = EXCLUDED.is_split,
-        comment_chars = EXCLUDED.comment_chars;
+SET caregiver_id     = EXCLUDED.caregiver_id,
+    agency_id        = EXCLUDED.agency_id,
+    franchisor_id    = EXCLUDED.franchisor_id,
+    parent_id        = EXCLUDED.parent_id,
+    start_at         = EXCLUDED.start_at,
+    end_at           = EXCLUDED.end_at,
+    in_at            = EXCLUDED.in_at,
+    out_at           = EXCLUDED.out_at,
+    clock_in_method  = EXCLUDED.clock_in_method,
+    clock_out_method = EXCLUDED.clock_out_method,
+    status_code      = EXCLUDED.status_code,
+    is_split         = EXCLUDED.is_split,
+    comment_chars    = EXCLUDED.comment_chars;
+
+\echo === model counts ===
+SELECT (SELECT COUNT(*) FROM model_caregiver)  AS model_caregiver,
+       (SELECT COUNT(*) FROM model_carevisit) AS model_carevisit;
+
+
 
 -- Top performers: caregivers with the highest number of completed vistis
 -- Completed means that the caregiver has both clock in/out times with duration greater than 5 minutes
@@ -85,19 +182,12 @@ ORDER BY detailed_pct DESC, median_chars DESC;
 SELECT carelog_id, caregiver_id, in_at, out_at
 FROM mart_visit_base
 WHERE in_at IS NOT NULL AND out_at IS NOT NULL AND out_at <= in_at;
-WITH v AS (
-    SELECT caregiver_id, carelog_id, in_at, out_at,
-            LAG(out_at) OVER (PARTITION BY caregiver_id ORDER BY in_at) AS prev_out
-    FROM mart_visit_base
-    WHERE in_at IS NOT NULL AND out_at IS NOT NULL
-)
-SELECT * FROM v WHERE prev_out IS NOT NULL AND in_at < prev_out;
 
 -- Caregiver Overtime Analysis: Clearly identify caregivers regularly incurring overtime hours. 
 -- Shows weeks where caregivers exceeded 40 hours (2400 minutes)
 SELECT caregiver_id, week_start, ROUND(mins/60.0,1) AS hours
 FROM mart_overtime_by_week
-WHERE is_overtime
+WHERE is_overtime AND mins > 3600
 ORDER BY week_start DESC, hours DESC;
 
 -- Who drives the most overtime?
@@ -110,7 +200,7 @@ SELECT caregiver_id,
             COUNT(*) FILTER (WHERE is_overtime)::numeric
             / NULLIF(COUNT(*),0), 2
         ) AS ot_rate
-FROM mart.mart_overtime_by_week
+FROM mart_overtime_by_week
 GROUP BY caregiver_id
 HAVING COUNT(*) >= 4 
 ORDER BY weeks_overtime DESC, ot_rate DESC, weeks_observed DESC
@@ -121,11 +211,11 @@ LIMIT 20;
 -- Also shows total and average overtime hours per OT week for context
 WITH ot AS (
     SELECT caregiver_id, week_start, mins, is_overtime
-    FROM mart.mart_overtime_by_week
+    FROM mart_overtime_by_week
 ),
 cg AS (
     SELECT caregiver_id, agency_id
-    FROM model.model_caregiver
+    FROM model_caregiver
 )
 SELECT
     cg.agency_id,
@@ -150,9 +240,15 @@ ORDER BY agency_ot_weeks DESC, agency_ot_week_rate DESC;
 -- Weekend: Saturday and Sunday
 -- Overnight: end date > start date
 -- In OT week: whether the visit falls in a week where the caregiver had >40 hours
+
+-- If user is overtime many weeks - are there any specific caregivers who keep repeating
+-- Threshold - 4+ weeks of overtime
+-- Are specific caregivers or agencies disproportionately responsible for overtime? Output -> day -> # of overtime, night -> # of overtime 
+-- 2 columsn - shift and count of overtime shifts
+-- Do differnet shifts (day, evening, night) are more likely to have incurred overtime shifts?
 WITH ot_weeks AS (
     SELECT caregiver_id, week_start
-    FROM mart.mart_overtime_by_week
+    FROM mart_overtime_by_week
     WHERE is_overtime
 ),
 v AS (
@@ -163,7 +259,7 @@ v AS (
         COALESCE(out_at, end_at) AS end_ts,
         is_split,
         actual_mins
-    FROM mart.mart_visit_base
+    FROM mart_visit_base
     WHERE actual_mins IS NOT NULL
 ),
 labeled AS (

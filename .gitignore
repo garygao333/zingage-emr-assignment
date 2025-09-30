@@ -1,6 +1,7 @@
 # Large data files
 data/*.csv
 *.csv
+result.out
 
 # Environment variables
 .env

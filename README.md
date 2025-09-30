@@ -132,3 +132,4 @@ MODEL_CAREGIVER 1 ──> N MODEL_CAREVISIT (one caregiver can have many care vi
 
 THINK ABOUT --> Do I still need a database schema if I already have an ERD? 
 
+

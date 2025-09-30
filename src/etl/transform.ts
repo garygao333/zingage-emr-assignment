@@ -50,7 +50,7 @@ function toInt(v: any): number | null {
 
 // Convert a value to string. Converts undefined, null, or empty string to null. 
 function toNullable(v: any): string | null {
-  if (v === undefined || v === null || v === "") {
+  if (v === undefined || v === null || v === "" || v === "None") {
     return null;
   }
   return String(v);

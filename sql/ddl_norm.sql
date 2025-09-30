@@ -4,22 +4,78 @@
  */
 
 -- Normalized model (3NF)
+
+DROP TABLE IF EXISTS model_carevisit CASCADE;
+DROP TABLE IF EXISTS model_caregiver CASCADE;
+DROP TABLE IF EXISTS model_applicant_status CASCADE;
+DROP TABLE IF EXISTS model_employment_status CASCADE;
+DROP TABLE IF EXISTS model_external_identifier CASCADE;
+DROP TABLE IF EXISTS model_profile CASCADE;
+DROP TABLE IF EXISTS model_locations CASCADE;
+DROP TABLE IF EXISTS model_agency CASCADE;
+DROP TABLE IF EXISTS model_franchisor CASCADE;
+
+CREATE TABLE IF NOT EXISTS model_franchisor (
+    franchisor_id text PRIMARY KEY,
+    name text
+);
+
+CREATE TABLE IF NOT EXISTS model_agency (
+    agency_id text PRIMARY KEY,
+    name text
+);
+
+CREATE TABLE IF NOT EXISTS model_locations (
+    locations_id text PRIMARY KEY,
+    name text
+);
+
+CREATE TABLE IF NOT EXISTS model_profile (
+  profile_id text PRIMARY KEY
+);
+
+CREATE TABLE IF NOT EXISTS model_external_identifier (
+  external_id text PRIMARY KEY
+);
+
+CREATE TABLE IF NOT EXISTS model_employment_status (
+  employment_status_id smallserial PRIMARY KEY,
+  employment_status text UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS model_applicant_status (
+  applicant_status_id smallserial PRIMARY KEY,
+  applicant_status text UNIQUE
+);
+
 CREATE TABLE IF NOT EXISTS model_caregiver (
     caregiver_id text PRIMARY KEY,
+    franchisor_id text,
     agency_id text,
+    locations_id text,
     profile_id text,
-    applicant_status text,
-    employment_status text,
-    is_active boolean GENERATED ALWAYS AS (employment_status = 'active') STORED -- THINK ABOUT: are derived columns good? 
+    external_id text,
+    applicant_status_id smallint,
+    employment_status_id smallint,
+    is_active boolean,
+    constraint fk_caregiver_franchisor FOREIGN KEY (franchisor_id) REFERENCES model_franchisor(franchisor_id),
+    constraint fk_caregiver_agency FOREIGN KEY (agency_id) REFERENCES model_agency(agency_id),
+    constraint fk_caregiver_location FOREIGN KEY (locations_id) REFERENCES model_locations(locations_id),
+    constraint fk_caregiver_profile FOREIGN KEY (profile_id) REFERENCES model_profile(profile_id),
+    constraint fk_caregiver_external FOREIGN KEY (external_id)  REFERENCES model_external_identifier(external_id),
+    constraint fk_caregiver_app_status FOREIGN KEY (applicant_status_id) REFERENCES model_applicant_status(applicant_status_id),
+    constraint fk_caregiver_emp_status FOREIGN KEY (employment_status_id)REFERENCES model_employment_status(employment_status_id)
 );
 
 -- Carelogs/care visits table
 -- References caregiver_id as foreign key to ensure that the visit points to a valid caregiver
 CREATE TABLE IF NOT EXISTS model_carevisit (
     carelog_id text PRIMARY KEY,
-    caregiver_id text REFERENCES model_caregiver(caregiver_id),
+    caregiver_id text,
+    agency_id text,
+    franchisor_id text,
     parent_id text,
-    start_at timestamptz,
+    start_at timestamp,
     end_at timestamptz,
     in_at timestamptz,
     out_at timestamptz,
@@ -27,7 +83,10 @@ CREATE TABLE IF NOT EXISTS model_carevisit (
     clock_out_method text,
     status_code text,
     is_split boolean,
-    comment_chars int
+    comment_chars int,
+    constraint fk_visit_caregiver FOREIGN KEY (caregiver_id) REFERENCES model_caregiver(caregiver_id),
+    constraint fk_visit_agency FOREIGN KEY (agency_id) REFERENCES model_agency(agency_id),
+    constraint fk_visit_franchisor FOREIGN KEY (franchisor_id) REFERENCES model_franchisor(franchisor_id)
 );
 
 -- Indexes to speed up common queries
@@ -89,8 +148,8 @@ WITH d AS (
     WHERE actual_mins IS NOT NULL AND actual_mins > 0
 ), b AS (
     SELECT
-        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY actual_mins) AS q1,
-        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY actual_mins) AS q3
+        PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY actual_mins) AS q1,
+        PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY actual_mins) AS q3
     FROM d
 )
 SELECT d.*, b.q1, b.q3, (b.q3 - b.q1) AS iqr
@@ -124,7 +183,8 @@ WITH wk AS (
             SUM(actual_mins) AS mins
     FROM mart_visit_base
     WHERE actual_mins IS NOT NULL
-    GROUP BY caregiver_id, DATE_TRUNC('week', COALESCE(in_at, start_at))
+    GROUP BY caregiver_id, DATE_TRUNC('week', COALESCE(in_at, start_at)) 
+    HAVING sum(actual_mins) > 2400
 )
 SELECT caregiver_id, week_start, mins, (mins > 2400) AS is_overtime
 FROM wk;

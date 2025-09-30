@@ -4,11 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "db:ddl:init": "psql \"$DATABASE_URL\" -f sql/ddl_init.sql",
-    "db:ddl:norm": "psql \"$DATABASE_URL\" -f sql/ddl_norm.sql",
-    "etl": "tsx src/etl/transform.ts",
-    "db:dml": "psql \"$DATABASE_URL\" -f sql/dml.sql",
-    "queries": "psql \"$DATABASE_URL\" -f sql/queries.sql"
+    "db:ddl:init": "dotenv -e .env -- sh -c 'psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/ddl_init.sql'",
+    "db:ddl:norm": "dotenv -e .env -- sh -c 'psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/ddl_norm.sql'",
+    "etl":         "dotenv -e .env -- tsx src/etl/transform.ts",
+    "db:dml":      "dotenv -e .env -- sh -c 'psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/dml.sql'",
+    "queries":     "dotenv -e .env -- sh -c 'psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/queries.sql'"
   },
   "keywords": [],
   "author": "",
@@ -22,6 +22,7 @@
   "devDependencies": {
     "@types/node": "^24.5.2",
     "@types/pg": "^8.15.5",
+    "dotenv-cli": "^10.0.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.2"
   }
