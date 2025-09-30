@@ -1,32 +1,23 @@
-# Large data files
 data/*.csv
 *.csv
-result.out
 
-# Environment variables
 .env
 .env.local
 .env.*.local
 
-# Node
 node_modules/
 npm-debug.log*
 
-# OS files
 .DS_Store
 Thumbs.db
-
-# IDE
 .vscode/
 .idea/
 .claude/
 
-# Temporary files
 *.log
 *.tmp
 temp/
 
-# SQL output files
 *.out
 check_*.sql
 debug_*.sql
