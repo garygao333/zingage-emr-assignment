@@ -5,6 +5,8 @@
 
 -- Normalized model (3NF)
 
+
+-- Drop existing tables if they exist to start fresh
 DROP TABLE IF EXISTS model_carevisit CASCADE;
 DROP TABLE IF EXISTS model_caregiver CASCADE;
 DROP TABLE IF EXISTS model_applicant_status CASCADE;
@@ -15,39 +17,47 @@ DROP TABLE IF EXISTS model_locations CASCADE;
 DROP TABLE IF EXISTS model_agency CASCADE;
 DROP TABLE IF EXISTS model_franchisor CASCADE;
 
+-- Franchisor table
 CREATE TABLE IF NOT EXISTS model_franchisor (
     franchisor_id text PRIMARY KEY,
     name text
 );
 
+-- Agency table
 CREATE TABLE IF NOT EXISTS model_agency (
     agency_id text PRIMARY KEY,
     name text
 );
 
+-- Locations table
 CREATE TABLE IF NOT EXISTS model_locations (
     locations_id text PRIMARY KEY,
     name text
 );
 
+-- Profile table
 CREATE TABLE IF NOT EXISTS model_profile (
   profile_id text PRIMARY KEY
 );
 
+-- External Identifier table
 CREATE TABLE IF NOT EXISTS model_external_identifier (
   external_id text PRIMARY KEY
 );
 
+-- Employment status table
 CREATE TABLE IF NOT EXISTS model_employment_status (
   employment_status_id smallserial PRIMARY KEY,
   employment_status text UNIQUE
 );
 
+-- Applicant status table
 CREATE TABLE IF NOT EXISTS model_applicant_status (
   applicant_status_id smallserial PRIMARY KEY,
   applicant_status text UNIQUE
 );
 
+-- Caregiver table
 CREATE TABLE IF NOT EXISTS model_caregiver (
     caregiver_id text PRIMARY KEY,
     franchisor_id text,

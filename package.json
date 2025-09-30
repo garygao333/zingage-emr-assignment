@@ -6,9 +6,10 @@
   "scripts": {
     "db:ddl:init": "dotenv -e .env -- sh -c 'psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/ddl_init.sql'",
     "db:ddl:norm": "dotenv -e .env -- sh -c 'psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/ddl_norm.sql'",
-    "etl":         "dotenv -e .env -- tsx src/etl/transform.ts",
-    "db:dml":      "dotenv -e .env -- sh -c 'psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/dml.sql'",
-    "queries":     "dotenv -e .env -- sh -c 'psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/queries.sql'"
+    "etl": "dotenv -e .env -- tsx src/etl/transform.ts",
+    "etl:norm": "dotenv -e .env -- tsx src/etl/transform_norm.ts",
+    "db:dml": "dotenv -e .env -- sh -c 'psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/dml.sql'",
+    "queries": "dotenv -e .env -- sh -c 'psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f sql/queries.sql'"
   },
   "keywords": [],
   "author": "",
