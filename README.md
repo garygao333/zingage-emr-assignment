@@ -1,4 +1,4 @@
-# Zingage Data Challenge - Gary Gao
+# Zingage Take Home Assignment - Gary Gao
 
 ### To start
 
@@ -28,9 +28,28 @@ Run ddl_norm.sql to create the normalized schemas and mart schemas w/ analytical
 
 npm run db:ddl:norm
 
-Run dml.sql to migrate data to the normalized views/tables and run analytical queries: 
+Run etl/transform_norm.ts to migrate data to the normalized views/tables
+
+npm run etl:norm
+
+Run dml.sql to run analytical queries: 
 
 npm run db:dml
+
+To test queries: 
+
+psql -h localhost -U garygao -d zingage 
+
+To generate result.out
+
+npm run db:dml > result.out      
+
+### Schema Design
+
+ ![Image of ERD](erd_zingage.jpg)
+Note that ERD is created from MySQL
+
+
 
 ### File structure: 
 
@@ -45,6 +64,7 @@ zingage-project/
 ├─ src (or app)/
 │  └─ etl/
 │     ├─ transform.ts (read, transform, and load row by row with psql transform. )
+├─ result.out (analytics output)
 ├─ README (contains ERD)
 ├─ .env
 └─ package.json
